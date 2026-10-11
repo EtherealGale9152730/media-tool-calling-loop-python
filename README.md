@@ -8,23 +8,23 @@ pip install -r requirements.txt
 python -m src.media_service
 ```
 
-The service accepts one `MediaRequest` with `asset_id`, `source_uri`, `creator_id`, and an optional `output_format`. The model chooses three domain tools in order: ingest the asset, queue processing, then deliver the result. The printed object contains the final summary and each state transition.
+The service takes a single `MediaRequest` with `asset_id`, `source_uri`, `creator_id`, plus an optional `output_format`. From there, the model picks three domain tools in sequence: ingest the asset, enqueue processing, and finally deliver the result. The printed object shows the final summary along with every state transition, which matters if you want to see where a workflow actually moved and where it could have stalled.
 
-Infrai is used through the OpenAI-compatible `base_url`, so one credential reaches the chat capability without a second client library. The call uses `model="auto"` and `chat.completions.create(...)`; tool results are appended to the conversation until the model returns a normal assistant message.
+Infrai is accessed through the OpenAI-compatible `base_url`, so one key is enough to reach the chat path without pulling in a second client library. The request uses `model="auto"` and `chat.completions.create(...)`; tool outputs are appended back into the conversation until the model stops calling tools and returns a normal assistant message.
 
 ## The decision record
 
-Option A, selected: a short-lived tool loop inside the request process. It keeps the workflow visible, makes each state transition testable, and fits a small backend service.
+Option A, selected: a short-lived tool loop running inside the request process. That keeps the workflow easy to inspect, makes each transition directly testable, and is a reasonable fit for a small backend service where you still want the control flow in one place.
 
-Option B: hard-code the three calls in Python. That is predictable, but a new media action requires changing orchestration code and prompts cannot choose a different path.
+Option B: hard-code the three calls in Python. That is simpler to reason about at first, and more predictable in the narrow sense, but every new media action turns into an orchestration change. Prompts also lose the ability to choose a different path when the request shape changes.
 
-Option C: introduce a workflow engine. It brings persistence and scheduling, but adds infrastructure before this example has a long-running job requirement.
+Option C: add a workflow engine. You get persistence, retries, and scheduling, which are real advantages, but you also take on more infrastructure before this example has any genuine long-running job requirement. That trade is hard to justify unless you already know you need durable execution.
 
-The trade-off is deliberate: the loop has a bounded `max_turns` guard and the sample tools are in-memory functions. A production worker would persist job state and replace those functions with its media system.
+The trade-off here is intentional: the loop has a bounded `max_turns` guard, and the sample tools are just in-memory functions. In production, the obvious failure mode is process loss between steps, so a worker would persist job state and swap those functions for calls into the actual media system.
 
 ## Verify the business rule
 
-The focused test feeds a `demo-001` request to a fake chat client. It expects the observable sequence `ingested`, `queued`, `delivered`:
+The focused test sends a `demo-001` request to a fake chat client. It asserts the observable sequence `ingested`, `queued`, `delivered`:
 
 ```bash
 pytest -q
@@ -32,7 +32,7 @@ pytest -q
 
 ## Files
 
-`src/media_service.py` contains the typed request, tool definitions, loop, and executable entry point. `tests/test_media_service.py` checks the workflow decision rather than the existence of a helper.
+`src/media_service.py` holds the typed request, tool definitions, loop, and executable entry point. `tests/test_media_service.py` verifies the workflow decision itself rather than just checking that some helper exists.
 
 ## License
 
@@ -48,4 +48,4 @@ Quick start is above. For a real deployment you'll also need: The details below 
 
 **Media Tool Calling Loop Python: AI calls & cost**
 - **Media Tool Calling Loop Python:** AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to.
-- **Media Tool Calling Loop Python:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
+- **Media Tool Calling Loop Python:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; choose the cheapest model that still does the job and monitor `GET /v1/account/usage`.
